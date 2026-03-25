@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@coinbase/wallet-sdk": "latest",
     "@tanstack/react-query": "^5.66.0",
     "next": "latest",
     "ox": "latest",

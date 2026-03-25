@@ -1,11 +1,16 @@
 "use client";
 
+import { formatUnits } from "viem";
+import { base } from "wagmi/chains";
 import {
   useAccount,
+  useBalance,
+  useChainId,
   useConnect,
   useDisconnect,
   useReadContract,
   useReadContracts,
+  useSwitchChain,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
@@ -43,11 +48,21 @@ function formatConnectorName(name: string) {
 
 export default function Page() {
   const { address, isConnected, connector, isReconnecting } = useAccount();
+  const chainId = useChainId();
   const { connectors, connect, error: connectError, isPending: isConnecting } = useConnect();
   const { disconnect } = useDisconnect();
+  const { switchChain, isPending: isSwitchingChain, error: switchError } = useSwitchChain();
   const { data: hash, error: writeError, isPending: isSubmitting, writeContract } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
     hash,
+  });
+
+  const { data: baseBalance } = useBalance({
+    address,
+    chainId: base.id,
+    query: {
+      enabled: Boolean(address),
+    },
   });
 
   const { data: userData, refetch: refetchUser } = useReadContract({
@@ -79,12 +94,14 @@ export default function Page() {
   const nextBadge = getNextBadge(streak);
   const earnedCount = claimedReads.filter((badgeRead) => badgeRead.result === true).length;
   const nextAvailableMs = lastCheckIn ? Number(lastCheckIn) * 1000 + 24 * 60 * 60 * 1000 : 0;
-  const canCheckIn = !lastCheckIn || lastCheckIn === 0n || Date.now() >= nextAvailableMs;
-  const cooldownText =
-    !lastCheckIn || lastCheckIn === 0n || canCheckIn
-      ? "Ready to mint your next streak."
-      : formatCooldown(nextAvailableMs);
+  const contractCooldownActive = Boolean(lastCheckIn) && lastCheckIn !== 0n && Date.now() < nextAvailableMs;
+  const cooldownText = contractCooldownActive ? formatCooldown(nextAvailableMs) : "Ready to mint your next streak.";
   const visibleConnectors = connectors.filter((item) => item.type !== "mock");
+  const onBase = chainId === base.id;
+  const baseBalanceText = baseBalance
+    ? `${Number(formatUnits(baseBalance.value, baseBalance.decimals)).toFixed(6)} ${baseBalance.symbol}`
+    : "--";
+  const canSubmit = isConnected && onBase && !isSubmitting && !isConfirming;
 
   return (
     <main className="page-shell">
@@ -93,8 +110,7 @@ export default function Page() {
           <p className="eyebrow">Base MiniApp</p>
           <h1>Daily Check-in Badge</h1>
           <p className="lede">
-            Check in once per day on Base, build a streak, and unlock ERC-721 badges at 1, 3, 7, 14,
-            and 30 days.
+            Check in on Base, build a streak, and unlock ERC-721 badges at 1, 3, 7, 14, and 30 days.
           </p>
           <div className="cta-row">
             {isConnected ? (
@@ -117,9 +133,18 @@ export default function Page() {
                 No wallet connector available
               </button>
             )}
+            {!onBase && isConnected ? (
+              <button
+                className="button button-ghost"
+                disabled={isSwitchingChain}
+                onClick={() => switchChain({ chainId: base.id })}
+              >
+                {isSwitchingChain ? "Switching..." : "Switch To Base"}
+              </button>
+            ) : null}
             <button
               className="button button-ghost"
-              disabled={!isConnected || !canCheckIn || isSubmitting || isConfirming}
+              disabled={!canSubmit}
               onClick={() =>
                 writeContract({
                   address: contractAddress,
@@ -132,7 +157,11 @@ export default function Page() {
             </button>
           </div>
           {connectError ? <p className="inline-note">Wallet error: {connectError.message}</p> : null}
+          {switchError ? <p className="inline-note">Network error: {switchError.message}</p> : null}
+          {writeError ? <p className="inline-note">Contract response: {writeError.message}</p> : null}
           {isReconnecting ? <p className="inline-note">Reconnecting wallet session...</p> : null}
+          {!onBase && isConnected ? <p className="inline-note">You must be on Base Mainnet before sending the check-in transaction.</p> : null}
+          {contractCooldownActive ? <p className="inline-note">The deployed contract only allows one successful check-in every 24 hours for each wallet.</p> : null}
         </div>
 
         <div className="hero-panel">
@@ -168,7 +197,7 @@ export default function Page() {
               <p className="eyebrow">Wallet</p>
               <h2>Session</h2>
             </div>
-            {isConnected && isConfirmed ? (
+            {isConnected ? (
               <button className="mini-link" onClick={() => refetchUser()}>
                 Refresh
               </button>
@@ -182,6 +211,14 @@ export default function Page() {
             <div>
               <dt>Active connector</dt>
               <dd>{connector ? formatConnectorName(connector.name) : "Not connected"}</dd>
+            </div>
+            <div>
+              <dt>Current chain</dt>
+              <dd>{chainId ? `${chainId}${onBase ? " (Base Mainnet)" : " (Not Base)"}` : "Unknown"}</dd>
+            </div>
+            <div>
+              <dt>Base gas balance</dt>
+              <dd>{baseBalanceText}</dd>
             </div>
             <div>
               <dt>Contract address</dt>

@@ -1,6 +1,6 @@
 import { createConfig, createStorage, http } from "wagmi";
 import { base } from "wagmi/chains";
-import { coinbaseWallet, injected } from "wagmi/connectors";
+import { injected } from "wagmi/connectors";
 import { Attribution } from "ox/erc8021";
 
 const DATA_SUFFIX = Attribution.toDataSuffix({
@@ -12,9 +12,6 @@ export const config = createConfig({
   connectors: [
     injected({
       shimDisconnect: true,
-    }),
-    coinbaseWallet({
-      appName: "Daily Check-in Badge",
     }),
   ],
   transports: {

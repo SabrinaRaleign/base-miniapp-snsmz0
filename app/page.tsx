@@ -35,9 +35,15 @@ function formatCooldown(targetMs: number) {
   return `Next check-in in ${hours}h ${minutes}m`;
 }
 
+function formatConnectorName(name: string) {
+  if (name === "injected") return "Browser Wallet";
+  if (name.toLowerCase().includes("coinbase")) return "Coinbase Wallet";
+  return name;
+}
+
 export default function Page() {
-  const { address, isConnected } = useAccount();
-  const { connectors, connect, isPending: isConnecting } = useConnect();
+  const { address, isConnected, connector, isReconnecting } = useAccount();
+  const { connectors, connect, error: connectError, isPending: isConnecting } = useConnect();
   const { disconnect } = useDisconnect();
   const { data: hash, error: writeError, isPending: isSubmitting, writeContract } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
@@ -78,8 +84,7 @@ export default function Page() {
     !lastCheckIn || lastCheckIn === 0n || canCheckIn
       ? "Ready to mint your next streak."
       : formatCooldown(nextAvailableMs);
-
-  const primaryConnector = connectors[0];
+  const visibleConnectors = connectors.filter((item) => item.type !== "mock");
 
   return (
     <main className="page-shell">
@@ -94,15 +99,22 @@ export default function Page() {
           <div className="cta-row">
             {isConnected ? (
               <button className="button button-secondary" onClick={() => disconnect()}>
-                Disconnect
+                Disconnect {connector ? `(${formatConnectorName(connector.name)})` : ""}
               </button>
+            ) : visibleConnectors.length > 0 ? (
+              visibleConnectors.map((item) => (
+                <button
+                  key={item.id}
+                  className={item.type === "coinbaseWallet" ? "button button-ghost" : "button"}
+                  disabled={isConnecting}
+                  onClick={() => connect({ connector: item })}
+                >
+                  {isConnecting ? "Connecting..." : `Connect ${formatConnectorName(item.name)}`}
+                </button>
+              ))
             ) : (
-              <button
-                className="button"
-                disabled={!primaryConnector || isConnecting}
-                onClick={() => primaryConnector && connect({ connector: primaryConnector })}
-              >
-                {isConnecting ? "Connecting..." : "Connect Smart Wallet"}
+              <button className="button" disabled>
+                No wallet connector available
               </button>
             )}
             <button
@@ -119,6 +131,8 @@ export default function Page() {
               {isSubmitting || isConfirming ? "Submitting..." : "Check In"}
             </button>
           </div>
+          {connectError ? <p className="inline-note">Wallet error: {connectError.message}</p> : null}
+          {isReconnecting ? <p className="inline-note">Reconnecting wallet session...</p> : null}
         </div>
 
         <div className="hero-panel">
@@ -164,6 +178,10 @@ export default function Page() {
             <div>
               <dt>Connected address</dt>
               <dd>{address ?? "Connect a wallet to continue"}</dd>
+            </div>
+            <div>
+              <dt>Active connector</dt>
+              <dd>{connector ? formatConnectorName(connector.name) : "Not connected"}</dd>
             </div>
             <div>
               <dt>Contract address</dt>

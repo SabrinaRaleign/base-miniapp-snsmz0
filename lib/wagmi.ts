@@ -15,7 +15,6 @@ export const config = createConfig({
     }),
     coinbaseWallet({
       appName: "Daily Check-in Badge",
-      preference: "all",
     }),
   ],
   transports: {
